@@ -1,0 +1,8 @@
+target/
+*.class
+.idea/
+*.iml
+.vscode/
+*.mv.db
+*.trace.db
+Especificacao_6_Sistema_Bancario_Concorrente.pdf
