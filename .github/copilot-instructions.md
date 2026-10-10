@@ -18,7 +18,8 @@ Expected architectural layers:
 - `simulacao/`: concurrent operations and runner logic (`OperacaoBancariaThread`, `SimulacaoRunner`)
 - `service/`: orchestration layer between domain and persistence (`BancoService`)
 - `io/`: file export logic (`ExtratoExporter`)
-- `app/`: application startup (`Main`)
+- `ui/`: Swing interface for interactive banking operations
+- `app/`: application startup (`Main`), which opens the Swing interface
 
 The repository instructions in `AGENT.md` are the canonical source for project constraints. Treat them as the priority specification for naming, package structure, and concurrency requirements.
 
@@ -29,12 +30,13 @@ The project uses Maven and Java 17 (`pom.xml`).
 - Run one test class: `mvn -Dtest=ContaTest test`
 - Run one test method: `mvn "-Dtest=ContaTest#depositarAtualizaSaldoERegistraTransacao" test`
 - Build/package: `mvn package`
+- Run the desktop app: `mvn exec:java`
 
 No linter or formatter is configured; do not invent lint commands.
 
 ## High-level architecture and responsibilities
 
-Keep the work aligned with the layered design in `AGENT.md`. The current implementation is the first domain slice under `src/main/java/br/com/sistemabancario/domain`; future persistence, simulation, service, I/O, and app code should follow the package boundaries below:
+Keep the work aligned with the layered design in `AGENT.md`. The Swing UI lives in `ui/` and delegates operations to `BancoService`; it must not implement banking rules itself. The current in-memory repositories support the desktop demonstration, while JDBC persistence remains a required project layer.
 
 - Domain layer owns business rules and concurrency safety for balance changes. `Cliente` and `Transacao` are immutable.
 - `Conta` is the single place where the balance may change; balance and in-memory statement share its lock. `BigDecimal` represents money and values are limited to two decimal places.
@@ -42,6 +44,7 @@ Keep the work aligned with the layered design in `AGENT.md`. The current impleme
 - Persistence layer handles JDBC storage for accounts and transactions; do not leak database concerns into domain classes.
 - Simulation layer drives concurrent operations and verifies the final balances under load.
 - `BancoService` or similar coordination code should combine domain actions with repository persistence, but the domain itself should remain independent from infrastructure.
+- Swing classes under `ui/` collect user input and display balances/statements; delegate business operations to `BancoService`.
 - Exported statements should be produced in the I/O layer rather than inside domain entities.
 
 This is not a generic CRUD app; the core correctness condition is that concurrent operations leave the expected final balance even under heavy contention.
@@ -53,7 +56,7 @@ Follow these repository-specific rules instead of generic Java conventions:
 - Preserve the required class and method names exactly when implementing the core project: `Conta`, `Cliente`, `Transacao`, `depositar`, `sacar`, `transferirPara`, `OperacaoBancariaThread`, `ContaRepository`, and `TransacaoRepository`.
 - Keep the domain free of JDBC, `java.sql`, file system access, and repository references.
 - Use synchronized access for account state changes to avoid race conditions.
-- In transfers, use a consistent lock ordering (`contaOrigem` before `contaDestino` or equivalent) to prevent deadlock.
+- In transfers, acquire account locks in ascending immutable account-ID order to prevent deadlock, regardless of transfer direction.
 - Treat each financial operation as an immutable transaction record with type, value, and timestamp.
 - Simulations must validate that the final balance matches the expected value after concurrent operations.
 - Include a minimum of five JUnit tests, including at least one concurrency-focused test.

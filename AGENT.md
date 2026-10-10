@@ -188,6 +188,9 @@ service/
 io/
     ExtratoExporter.java
 
+ui/
+    BancoFrame.java
+
 app/
     Main.java
 ```
@@ -223,6 +226,8 @@ Os pacotes service e io são extensões justificadas:
 
 Novos pacotes podem ser adicionados quando houver justificativa
 arquitetural, mas as responsabilidades existentes devem continuar separadas.
+A interface Swing fica em ui/ e delega as operações ao BancoService; Main
+inicia a janela e não implementa regras de negócio.
 
 ---
 
@@ -514,8 +519,8 @@ Deve:
 
 Responsabilidade:
 
-Compor o sistema (instanciar ConnectionFactory, repositórios, serviço),
-disparar N threads de operação e imprimir o saldo final.
+Iniciar a interface gráfica Swing pela classe `app.Main`. A janela deve
+delegar operações ao `BancoService`, sem implementar regras bancárias.
 
 Main não contém regra de negócio nem SQL.
 
