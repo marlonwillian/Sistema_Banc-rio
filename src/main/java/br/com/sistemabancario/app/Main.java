@@ -22,6 +22,7 @@ public final class Main {
                     "A interface Swing precisa ser executada em um ambiente com tela.");
         }
 
+        BancoFrame.instalarTema();
         SwingUtilities.invokeLater(() -> {
             List<Conta> contas = List.of(
                     new Conta(1, new Cliente(1L, "Ana Silva"), new BigDecimal("1000.00")),
