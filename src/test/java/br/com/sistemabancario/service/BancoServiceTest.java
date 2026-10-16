@@ -4,6 +4,7 @@ import br.com.sistemabancario.domain.Cliente;
 import br.com.sistemabancario.domain.Conta;
 import br.com.sistemabancario.domain.SaldoInsuficienteException;
 import br.com.sistemabancario.domain.TipoTransacao;
+import br.com.sistemabancario.persistence.memory.InMemoryContaRepository;
 import br.com.sistemabancario.persistence.memory.InMemoryTransacaoRepository;
 import org.junit.jupiter.api.Test;
 
@@ -22,7 +23,8 @@ class BancoServiceTest {
 
         service.depositar(1, new BigDecimal("25.50"));
 
-        assertEquals(new BigDecimal("25.50"), conta.getSaldo());
+        assertEquals(new BigDecimal("25.50"),
+                service.buscarContaPorId(1).orElseThrow().getSaldo());
         assertEquals(1, service.buscarExtrato(1).size());
     }
 
@@ -50,5 +52,20 @@ class BancoServiceTest {
         assertThrows(SaldoInsuficienteException.class,
                 () -> service.sacar(1, BigDecimal.ONE));
         assertEquals(0, service.buscarExtrato(1).size());
+    }
+
+    @Test
+    void repositoriosEmMemoriaPodemSerReabertosSemPerderEstadoDaContaOuExtrato() {
+        InMemoryContaRepository contas = new InMemoryContaRepository();
+        InMemoryTransacaoRepository transacoes = new InMemoryTransacaoRepository();
+        contas.salvar(new Conta(1, new Cliente(1L, "Ana"), BigDecimal.ZERO));
+        BancoService service = new BancoService(contas, transacoes);
+
+        service.depositar(1, new BigDecimal("18.75"));
+        BancoService recarregado = new BancoService(contas, transacoes);
+
+        assertEquals(new BigDecimal("18.75"),
+                recarregado.buscarContaPorId(1).orElseThrow().getSaldo());
+        assertEquals(1, recarregado.buscarExtrato(1).size());
     }
 }

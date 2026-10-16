@@ -66,6 +66,20 @@ class ContaTest {
     }
 
     @Test
+    void transferenciaComSaldoInsuficienteNaoAlteraNenhumaConta() {
+        Conta origem = new Conta(1, cliente, new BigDecimal("5.00"));
+        Conta destino = new Conta(2, new Cliente(2L, "Bruno"), BigDecimal.ZERO);
+
+        assertThrows(SaldoInsuficienteException.class,
+                () -> origem.transferirPara(destino, new BigDecimal("5.01")));
+
+        assertEquals(new BigDecimal("5.00"), origem.getSaldo());
+        assertEquals(BigDecimal.ZERO.setScale(2), destino.getSaldo());
+        assertEquals(0, origem.getExtrato().size());
+        assertEquals(0, destino.getExtrato().size());
+    }
+
+    @Test
     void transferenciaEntreObjetosComMesmoIdERejeitada() {
         Conta origem = new Conta(1, cliente, new BigDecimal("20.00"));
         Conta destino = new Conta(1, new Cliente(2L, "Bruno"), BigDecimal.ZERO);

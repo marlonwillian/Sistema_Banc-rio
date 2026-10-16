@@ -1,15 +1,22 @@
 package br.com.sistemabancario.ui;
 
+import br.com.sistemabancario.domain.Cliente;
 import br.com.sistemabancario.domain.Conta;
 import br.com.sistemabancario.domain.TipoTransacao;
 import br.com.sistemabancario.domain.Transacao;
+import br.com.sistemabancario.io.ExtratoExporter;
+import br.com.sistemabancario.simulacao.ResultadoSimulacao;
+import br.com.sistemabancario.simulacao.SimulacaoRunner;
+import br.com.sistemabancario.simulacao.demo.DemonstracaoRaceCondition;
 import br.com.sistemabancario.service.BancoService;
 import com.formdev.flatlaf.FlatLightLaf;
 
 import javax.swing.BorderFactory;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -19,6 +26,7 @@ import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
 import javax.swing.SwingConstants;
+import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
@@ -27,14 +35,15 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.awt.RenderingHints;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.text.NumberFormat;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -58,6 +67,7 @@ public final class BancoFrame extends JFrame {
     private final JTextField campoValor = new JTextField(18);
     private final JLabel saldoAtual = new JLabel();
     private final JLabel nomeTitular = new JLabel();
+    private final JLabel nomeTitularResumo = new JLabel();
     private final JLabel totalTransacoes = new JLabel("0");
     private final DefaultTableModel modeloExtrato = new DefaultTableModel(
             new Object[]{"DATA", "OPERAÇÃO", "CONTA RELACIONADA", "VALOR"}, 0) {
@@ -167,11 +177,16 @@ public final class BancoFrame extends JFrame {
         JButton extrato = criarBotaoLateral("≡   Extrato", false);
         extrato.setAlignmentX(Component.LEFT_ALIGNMENT);
         barra.add(extrato);
+        JButton demonstracao = criarBotaoLateral("⚡   Race condition", false);
+        demonstracao.setAlignmentX(Component.LEFT_ALIGNMENT);
+        barra.add(javax.swing.Box.createVerticalStrut(7));
+        barra.add(demonstracao);
 
         operacoes.addActionListener(event -> painelOperacoes.scrollRectToVisible(
                 new Rectangle(0, 0, painelOperacoes.getWidth(), painelOperacoes.getHeight())));
         extrato.addActionListener(event -> painelExtrato.scrollRectToVisible(
                 new Rectangle(0, 0, painelExtrato.getWidth(), painelExtrato.getHeight())));
+        demonstracao.addActionListener(event -> demonstrarRaceCondition());
 
         barra.add(javax.swing.Box.createVerticalGlue());
         JLabel rodape = new JLabel("<html>AMBIENTE DE DEMONSTRAÇÃO<br><br>Operações registradas na sessão</html>");
@@ -215,13 +230,19 @@ public final class BancoFrame extends JFrame {
         titulos.add(subtitulo);
         cabecalho.add(titulos, BorderLayout.WEST);
 
-        JLabel ambiente = new JLabel("  ●  Sessão local");
+        JPanel acoes = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        acoes.setOpaque(false);
+        JButton novaConta = criarBotao("＋ Nova conta", true);
+        JLabel ambiente = new JLabel("  ●  Banco local");
         ambiente.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
         ambiente.setForeground(new Color(0x308B70));
         ambiente.setOpaque(true);
         ambiente.setBackground(new Color(0xE5F4EF));
         ambiente.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 12));
-        cabecalho.add(ambiente, BorderLayout.EAST);
+        acoes.add(novaConta);
+        acoes.add(ambiente);
+        novaConta.addActionListener(event -> criarConta());
+        cabecalho.add(acoes, BorderLayout.EAST);
         return cabecalho;
     }
 
@@ -293,7 +314,7 @@ public final class BancoFrame extends JFrame {
         constraints.weightx = 1;
         constraints.insets = new Insets(0, 0, 0, 10);
         constraints.gridx = 0;
-        linha.add(criarCartaoResumo("TITULAR DA CONTA", nomeTitular), constraints);
+        linha.add(criarCartaoResumo("TITULAR DA CONTA", nomeTitularResumo), constraints);
         constraints.gridx = 1;
         constraints.insets = new Insets(0, 0, 0, 0);
         linha.add(criarCartaoResumo("TRANSAÇÕES REGISTRADAS", totalTransacoes), constraints);
@@ -365,9 +386,13 @@ public final class BancoFrame extends JFrame {
         JButton depositar = criarBotao("Depositar", false);
         JButton sacar = criarBotao("Sacar", false);
         JButton transferir = criarBotao("Transferir", true);
+        JButton simular = criarBotao("Simular", false);
+        JButton exportar = criarBotao("Exportar extrato", false);
         botoes.add(depositar);
         botoes.add(sacar);
         botoes.add(transferir);
+        botoes.add(simular);
+        botoes.add(exportar);
         rodape.add(botoes, BorderLayout.EAST);
         painelOperacoes.add(rodape, BorderLayout.SOUTH);
 
@@ -377,6 +402,8 @@ public final class BancoFrame extends JFrame {
                 () -> bancoService.sacar(idContaSelecionada(), lerValor())));
         transferir.addActionListener(event -> executarOperacao(
                 () -> bancoService.transferir(idContaSelecionada(), idContaDestino(), lerValor())));
+        simular.addActionListener(event -> executarSimulacao(simular));
+        exportar.addActionListener(event -> exportarExtrato());
         return painelOperacoes;
     }
 
@@ -490,6 +517,168 @@ public final class BancoFrame extends JFrame {
         }
     }
 
+    private void executarSimulacao(JButton botaoSimular) {
+        int confirmar = JOptionPane.showConfirmDialog(
+                this,
+                "Executar 48 operacoes bancarias em 4 threads sobre as contas cadastradas?",
+                "Simulacao concorrente",
+                JOptionPane.OK_CANCEL_OPTION);
+        if (confirmar != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        definirHabilitado(painelOperacoes, false);
+        new SwingWorker<ResultadoSimulacao, Void>() {
+            @Override
+            protected ResultadoSimulacao doInBackground() {
+                return new SimulacaoRunner(bancoService).executar(
+                        4, 12, new BigDecimal("1.00"));
+            }
+
+            @Override
+            protected void done() {
+                definirHabilitado(painelOperacoes, true);
+                try {
+                    ResultadoSimulacao resultado = get();
+                    atualizarPainel();
+                    JOptionPane.showMessageDialog(
+                            BancoFrame.this,
+                            "Operacoes realizadas: " + resultado.operacoesRealizadas()
+                                    + "\nRecusadas por saldo insuficiente: "
+                                    + resultado.operacoesRecusadasPorSaldo()
+                                    + "\nSaldos conferidos: "
+                                    + (resultado.saldosCorretos() ? "sim" : "nao")
+                                    + "\n\nEsperado: " + resultado.saldosEsperados()
+                                    + "\nObtido: " + resultado.saldosObtidos(),
+                            "Resultado da simulacao",
+                            resultado.saldosCorretos()
+                                    ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.ERROR_MESSAGE);
+                } catch (Exception exception) {
+                    JOptionPane.showMessageDialog(
+                            BancoFrame.this,
+                            "A simulacao falhou: " + exception.getMessage(),
+                            "Falha na simulacao",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    private static void definirHabilitado(Component componente, boolean habilitado) {
+        componente.setEnabled(habilitado);
+        if (componente instanceof java.awt.Container container) {
+            for (Component filho : container.getComponents()) {
+                definirHabilitado(filho, habilitado);
+            }
+        }
+    }
+
+    private void exportarExtrato() {
+        Conta conta = contaOrigemSelecionada();
+        if (conta == null) {
+            JOptionPane.showMessageDialog(this, "Selecione uma conta para exportar.");
+            return;
+        }
+        JFileChooser seletor = new JFileChooser();
+        seletor.setDialogTitle("Salvar extrato da conta " + conta.getId());
+        seletor.setSelectedFile(new java.io.File("extrato-conta-" + conta.getId() + ".txt"));
+        if (seletor.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        Path destino = seletor.getSelectedFile().toPath();
+        try {
+            new ExtratoExporter().exportar(
+                    conta.getId(),
+                    conta.getTitular().nome(),
+                    bancoService.buscarExtrato(conta.getId()),
+                    destino);
+            JOptionPane.showMessageDialog(this, "Extrato exportado para:\n" + destino);
+        } catch (RuntimeException exception) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    exception.getMessage(),
+                    "Falha ao exportar extrato",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void criarConta() {
+        JTextField titular = new JTextField(20);
+        JTextField saldoInicial = new JTextField("0,00", 20);
+        JPanel formulario = new JPanel(new GridBagLayout());
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.insets = new Insets(5, 5, 5, 5);
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.gridx = 0;
+        constraints.gridy = 0;
+        formulario.add(new JLabel("Nome do titular:"), constraints);
+        constraints.gridx = 1;
+        formulario.add(titular, constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 1;
+        formulario.add(new JLabel("Saldo inicial (R$):"), constraints);
+        constraints.gridx = 1;
+        formulario.add(saldoInicial, constraints);
+
+        int escolha = JOptionPane.showConfirmDialog(
+                this,
+                formulario,
+                "Criar conta bancária",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE);
+        if (escolha != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            String nome = titular.getText().trim();
+            if (nome.isEmpty()) {
+                throw new IllegalArgumentException("Informe o nome do titular.");
+            }
+            long novoId = bancoService.listarContas().stream()
+                    .mapToLong(Conta::getId)
+                    .max()
+                    .orElse(0L) + 1L;
+            Conta conta = bancoService.criarConta(
+                    novoId,
+                    new Cliente(novoId, nome),
+                    parsearValor(saldoInicial.getText()));
+            atualizarContasDisponiveis(conta);
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Conta " + conta.getId() + " criada para " + conta.getTitular().nome() + ".");
+        } catch (RuntimeException exception) {
+            JOptionPane.showMessageDialog(
+                    this, exception.getMessage(), "Não foi possível criar a conta", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void atualizarContasDisponiveis(Conta novaConta) {
+        List<Conta> contas = bancoService.listarContas();
+        contaOrigem.setModel(new DefaultComboBoxModel<>(contas.toArray(Conta[]::new)));
+        contaDestino.setModel(new DefaultComboBoxModel<>(contas.toArray(Conta[]::new)));
+        contaOrigem.setSelectedItem(novaConta);
+        contaDestino.setSelectedItem(novaConta);
+        atualizarPainel();
+    }
+
+    private void demonstrarRaceCondition() {
+        try {
+            var resultado = new DemonstracaoRaceCondition().executar();
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Saldo esperado com 2 depósitos: " + formatarMoeda(resultado.saldoEsperado())
+                            + "\nSem sincronização: " + formatarMoeda(resultado.saldoInseguro())
+                            + "\nCom Conta sincronizada: " + formatarMoeda(resultado.saldoSincronizado()),
+                    "Demonstração de race condition",
+                    resultado.saldoEsperado().equals(resultado.saldoSincronizado())
+                            ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.ERROR_MESSAGE);
+        } catch (RuntimeException exception) {
+            JOptionPane.showMessageDialog(
+                    this, exception.getMessage(), "Falha na demonstracao", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private void atualizarPainel() {
         Conta conta = contaOrigemSelecionada();
         if (conta == null) {
@@ -502,6 +691,7 @@ public final class BancoFrame extends JFrame {
 
         saldoAtual.setText(formatarMoeda(conta.getSaldo()));
         nomeTitular.setText(conta.getTitular().nome());
+        nomeTitularResumo.setText(conta.getTitular().nome());
         List<Transacao> transacoes = bancoService.buscarExtrato(conta.getId());
         totalTransacoes.setText(transacoes.size() + (transacoes.size() == 1
                 ? " movimentação" : " movimentações"));
@@ -543,6 +733,10 @@ public final class BancoFrame extends JFrame {
         if (texto.isEmpty()) {
             throw new IllegalArgumentException("Informe o valor da operação.");
         }
+        return parsearValor(texto);
+    }
+
+    private static BigDecimal parsearValor(String texto) {
         String normalizado = texto.replace(" ", "");
         if (normalizado.contains(",") && normalizado.contains(".")) {
             normalizado = normalizado.replace(".", "").replace(",", ".");

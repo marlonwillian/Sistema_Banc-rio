@@ -19,6 +19,11 @@ public final class InMemoryTransacaoRepository implements TransacaoRepository {
     }
 
     @Override
+    public synchronized void salvarTodas(List<Transacao> novasTransacoes) {
+        novasTransacoes.forEach(this::salvar);
+    }
+
+    @Override
     public List<Transacao> buscarPorConta(long contaId) {
         return transacoes.getOrDefault(contaId, new CopyOnWriteArrayList<>())
                 .stream()

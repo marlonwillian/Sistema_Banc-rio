@@ -2,7 +2,10 @@ package br.com.sistemabancario.app;
 
 import br.com.sistemabancario.domain.Cliente;
 import br.com.sistemabancario.domain.Conta;
-import br.com.sistemabancario.persistence.memory.InMemoryTransacaoRepository;
+import br.com.sistemabancario.persistence.ContaRepository;
+import br.com.sistemabancario.persistence.jdbc.ConnectionFactory;
+import br.com.sistemabancario.persistence.jdbc.JdbcContaRepository;
+import br.com.sistemabancario.persistence.jdbc.JdbcTransacaoRepository;
 import br.com.sistemabancario.service.BancoService;
 import br.com.sistemabancario.ui.BancoFrame;
 
@@ -24,12 +27,27 @@ public final class Main {
 
         BancoFrame.instalarTema();
         SwingUtilities.invokeLater(() -> {
-            List<Conta> contas = List.of(
-                    new Conta(1, new Cliente(1L, "Ana Silva"), new BigDecimal("1000.00")),
-                    new Conta(2, new Cliente(2L, "Bruno Costa"), new BigDecimal("750.00")));
-            BancoService bancoService = new BancoService(contas, new InMemoryTransacaoRepository());
-            BancoFrame janela = new BancoFrame(bancoService);
-            janela.setVisible(true);
+            try {
+                ConnectionFactory connectionFactory = new ConnectionFactory();
+                connectionFactory.inicializarSchema();
+                ContaRepository contaRepository = new JdbcContaRepository(connectionFactory);
+                if (contaRepository.listarTodas().isEmpty()) {
+                    contaRepository.salvar(new Conta(
+                            1, new Cliente(1L, "Ana Silva"), new BigDecimal("1000.00")));
+                    contaRepository.salvar(new Conta(
+                            2, new Cliente(2L, "Bruno Costa"), new BigDecimal("750.00")));
+                }
+                BancoService bancoService = new BancoService(
+                        contaRepository, new JdbcTransacaoRepository(connectionFactory));
+                BancoFrame janela = new BancoFrame(bancoService);
+                janela.setVisible(true);
+            } catch (RuntimeException exception) {
+                JOptionPane.showMessageDialog(
+                        null,
+                        "Nao foi possivel iniciar o sistema: " + exception.getMessage(),
+                        "Falha na inicializacao",
+                        JOptionPane.ERROR_MESSAGE);
+            }
         });
     }
 }

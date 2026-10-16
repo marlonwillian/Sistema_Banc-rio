@@ -1,0 +1,6 @@
+EXTRATO BANCARIO
+Conta: 1 | Titular: Ana Silva
+------------------------------------------------------------
+16/10/2026 18:01:12 | DEPOSITO | R$ 250,00
+16/10/2026 18:05:38 | SAQUE | R$ 50,00
+16/10/2026 18:12:04 | TRANSFERENCIA_ENVIADA | R$ 75,00 | Conta relacionada: 2
