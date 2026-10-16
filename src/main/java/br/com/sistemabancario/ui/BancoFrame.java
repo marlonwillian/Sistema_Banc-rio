@@ -269,9 +269,9 @@ public final class BancoFrame extends JFrame {
 
     private JPanel criarCartaoSaldo() {
         JPanel cartao = new Cartao(new Color(0x163D4A), 16);
-        cartao.setLayout(new BorderLayout(20, 0));
+        cartao.setLayout(new javax.swing.BoxLayout(cartao, javax.swing.BoxLayout.Y_AXIS));
         cartao.setBorder(BorderFactory.createEmptyBorder(22, 26, 22, 26));
-        cartao.setMaximumSize(new Dimension(Integer.MAX_VALUE, 166));
+        cartao.setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
 
         JPanel informacao = new JPanel();
         informacao.setOpaque(false);
@@ -288,7 +288,9 @@ public final class BancoFrame extends JFrame {
         informacao.add(saldoAtual);
         informacao.add(javax.swing.Box.createVerticalStrut(4));
         informacao.add(nomeTitular);
-        cartao.add(informacao, BorderLayout.CENTER);
+        informacao.setAlignmentX(Component.LEFT_ALIGNMENT);
+        cartao.add(informacao);
+        cartao.add(javax.swing.Box.createVerticalStrut(12));
 
         JPanel seletor = new JPanel();
         seletor.setOpaque(false);
@@ -301,7 +303,8 @@ public final class BancoFrame extends JFrame {
         seletor.add(trocarConta);
         seletor.add(javax.swing.Box.createVerticalStrut(9));
         seletor.add(contaOrigem);
-        cartao.add(seletor, BorderLayout.EAST);
+        seletor.setAlignmentX(Component.LEFT_ALIGNMENT);
+        cartao.add(seletor);
         return cartao;
     }
 
