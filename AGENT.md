@@ -616,8 +616,9 @@ close
 Atenção ao banco escolhido:
 
 - SQLite em arquivo pode falhar com "database is locked" sob escrita
-  concorrente. Se usado, serializar escritas no repositório ou usar H2/outro
-  banco com melhor suporte a concorrência;
+  concorrente. Se usado, serializar escritas no repositório ou usar outro
+  banco com melhor suporte a concorrência. Neste projeto, a persistência
+  configurada para entrega é MySQL;
 - gravar o saldo de uma conta no banco a cada operação, vindo de threads
   diferentes, pode gravar um valor desatualizado fora de ordem. Preferir:
   persistir cada Transacao a cada operação e persistir o saldo final
@@ -1176,7 +1177,9 @@ Essas tecnologias podem ser explicadas como alternativas, mas não devem ser
 introduzidas na solução padrão.
 
 Pode-se usar apenas o que a disciplina cobre: java.util.concurrent básico,
-JDBC, JUnit e I/O padrão do JDK. Banco leve (H2 ou SQLite) é aceitável.
+JDBC, JUnit e I/O padrão do JDK. Embora bancos leves como H2 ou SQLite sejam
+alternativas técnicas, a avaliação deste projeto exige MySQL; não reintroduzir
+H2 na configuração ou nos testes da aplicação.
 
 O objetivo é que o aluno compreenda:
 

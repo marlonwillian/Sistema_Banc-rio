@@ -5,8 +5,6 @@ import br.com.sistemabancario.persistence.PersistenceException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -15,25 +13,29 @@ import java.util.Objects;
 
 public final class ConnectionFactory {
     private static final String DEFAULT_URL =
-            "jdbc:h2:file:./data/sistema-bancario;DB_CLOSE_ON_EXIT=FALSE";
+            "jdbc:mysql://localhost:3306/sistema_bancario?serverTimezone=UTC";
 
     private final String jdbcUrl;
+    private final String usuario;
+    private final String senha;
 
     public ConnectionFactory() {
-        this(System.getProperty("sistema.banco.url", DEFAULT_URL));
+        this(
+                configuracao("sistema.banco.url", "SISTEMA_BANCO_URL", DEFAULT_URL),
+                configuracao("sistema.banco.usuario", "SISTEMA_BANCO_USUARIO", "root"),
+                configuracao("sistema.banco.senha", "SISTEMA_BANCO_SENHA", ""));
     }
 
-    public ConnectionFactory(String jdbcUrl) {
+    public ConnectionFactory(String jdbcUrl, String usuario, String senha) {
         this.jdbcUrl = Objects.requireNonNull(jdbcUrl, "A URL JDBC e obrigatoria.");
+        this.usuario = Objects.requireNonNull(usuario, "O usuario do banco e obrigatorio.");
+        this.senha = Objects.requireNonNull(senha, "A senha do banco e obrigatoria.");
     }
 
     public Connection getConnection() {
         try {
-            if (jdbcUrl.startsWith("jdbc:h2:file:")) {
-                Files.createDirectories(Path.of("./data").toAbsolutePath());
-            }
-            return DriverManager.getConnection(jdbcUrl, "sa", "");
-        } catch (SQLException | IOException exception) {
+            return DriverManager.getConnection(jdbcUrl, usuario, senha);
+        } catch (SQLException exception) {
             throw new PersistenceException("Nao foi possivel abrir conexao com o banco.", exception);
         }
     }
@@ -59,5 +61,13 @@ public final class ConnectionFactory {
         } catch (SQLException exception) {
             throw new PersistenceException("Nao foi possivel inicializar o schema do banco.", exception);
         }
+    }
+
+    private static String configuracao(String propriedade, String variavelAmbiente, String padrao) {
+        String valor = System.getProperty(propriedade);
+        if (valor == null || valor.isBlank()) {
+            valor = System.getenv(variavelAmbiente);
+        }
+        return valor == null || valor.isBlank() ? padrao : valor;
     }
 }

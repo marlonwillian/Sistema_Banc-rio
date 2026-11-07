@@ -10,7 +10,8 @@ concorrentes; a persistência JDBC guarda contas e movimentações entre execuç
 - Maven 3.9 ou superior;
 - ambiente desktop com suporte a Swing.
 
-As dependências FlatLaf, H2 e JUnit são resolvidas pelo Maven.
+O MySQL Server deve estar instalado e ativo. As dependências FlatLaf, MySQL
+Connector/J e JUnit são resolvidas pelo Maven.
 
 ## Compilar e executar
 
@@ -25,20 +26,48 @@ O primeiro comando compila o projeto e executa os testes. O segundo abre a
 janela Swing. Também é possível abrir o projeto no IntelliJ/Eclipse e executar
 `br.com.sistemabancario.app.Main`.
 
-Na primeira execução são criadas duas contas de demonstração. A base H2 fica em
-`data/sistema-bancario.mv.db`; as contas e transações permanecem salvas quando
-a aplicação é fechada. Para iniciar uma base H2 em memória para uma execução
-manual, passe outra URL JDBC ao Maven:
+Crie o banco de dados uma vez no MySQL:
 
 ```powershell
-mvn "-Dsistema.banco.url=jdbc:h2:mem:banco;DB_CLOSE_DELAY=-1" exec:java
+mysql -u root -p -e "CREATE DATABASE sistema_bancario CHARACTER SET utf8mb4"
 ```
+
+O usuário configurado precisa ter permissão para criar tabelas. A aplicação
+executa `schema.sql` ao iniciar e cria duas contas de demonstração quando a
+tabela de contas estiver vazia. Configure as credenciais no PowerShell antes
+de abrir a interface:
+
+```powershell
+$env:SISTEMA_BANCO_URL = "jdbc:mysql://localhost:3306/sistema_bancario?serverTimezone=UTC"
+$env:SISTEMA_BANCO_USUARIO = "root"
+$env:SISTEMA_BANCO_SENHA = "sua-senha"
+mvn exec:java
+```
+
+Também é possível configurar `sistema.banco.url`, `sistema.banco.usuario` e
+`sistema.banco.senha` como propriedades Java.
 
 ## Executar os testes
 
 ```powershell
 mvn test
 ```
+
+Os testes que não dependem de banco rodam sem configuração extra. Para executar
+os testes de integração JDBC, crie um banco descartável cujo nome termine em
+`_test` (por exemplo, `sistema_bancario_test`) e configure:
+
+```powershell
+mysql -u root -p -e "CREATE DATABASE sistema_bancario_test CHARACTER SET utf8mb4"
+$env:MYSQL_TEST_URL = "jdbc:mysql://localhost:3306/sistema_bancario_test?serverTimezone=UTC"
+$env:MYSQL_TEST_USER = "root"
+$env:MYSQL_TEST_PASSWORD = "sua-senha"
+mvn test
+```
+
+Os testes JDBC recriam as tabelas nesse banco de teste. **Não use o banco de
+produção ou o banco de demonstração como `MYSQL_TEST_URL`.** Sem essa
+configuração, os testes de integração MySQL são marcados como ignorados.
 
 Uma classe de teste:
 
@@ -52,8 +81,7 @@ Um método específico:
 mvn "-Dtest=ContaTest#depositarAtualizaSaldoERegistraTransacao" test
 ```
 
-Os testes de JDBC usam bases H2 isoladas em memória. Os testes de exportação
-usam diretórios temporários JUnit.
+Os testes de exportação usam diretórios temporários JUnit.
 
 ## Usar a aplicação
 
@@ -82,6 +110,8 @@ usam diretórios temporários JUnit.
   `JdbcTransacaoRepository`. Cada chamada abre e fecha sua própria conexão.
   A gravação de uma movimentação e a atualização atômica do saldo ocorrem em
   transação JDBC; os dois registros de uma transferência são gravados juntos.
+- O MySQL persiste as contas e transações; `schema.sql` define tabelas InnoDB,
+  chaves estrangeiras e índice do extrato.
 - `simulacao`: operações de teste concorrente, `OperacaoBancariaThread`,
   `SimulacaoRunner` e relatório de saldos esperados e obtidos.
 - `simulacao.demo`: conta deliberadamente insegura, isolada da conta real,
@@ -111,8 +141,8 @@ O arquivo `RELATORIO-RACE-CONDITION.md` registra a comparação “antes e depoi
   tabela. O visual é uma implementação original inspirada no
   [FlatLaf Sample UI Design](https://github.com/DJ-Raven/flatlaf-sample-ui-design),
   cuja licença MIT está publicada no repositório de referência.
-- Banco H2 em arquivo local, sem precisar instalar ou configurar um servidor
-  externo. A conexão pode ser trocada por outra URL JDBC.
+- MySQL como banco relacional da aplicação, configurável por variáveis de
+  ambiente ou propriedades Java.
 - Repositórios em memória para testes rápidos sem banco real.
 - Demonstração determinística da race condition: uma barreira força as duas
   threads inseguras a lerem o mesmo saldo antes de gravar, expondo a atualização

@@ -47,7 +47,7 @@ Keep the work aligned with the layered design in `AGENT.md`. The Swing UI lives 
 - Swing classes under `ui/` collect user input and display balances/statements; delegate business operations to `BancoService`.
 - Exported statements should be produced in the I/O layer rather than inside domain entities.
 
-This is not a generic CRUD app; the core correctness condition is that concurrent operations leave the expected final balance even under heavy contention. The desktop app uses H2 JDBC persistence, and its simulation and statement export are available through the Swing UI.
+This is not a generic CRUD app; the core correctness condition is that concurrent operations leave the expected final balance even under heavy contention. The desktop app uses MySQL JDBC persistence, and its simulation and statement export are available through the Swing UI.
 
 ## Key conventions and project-specific rules
 
@@ -77,4 +77,4 @@ When making changes in this repository:
 - `AGENT.md` — primary project specification and grading criteria
 - project package structure and naming conventions described in the spec
 
-The tests cover domain validation, deposits, withdrawals, transfers, concurrent deposit/withdraw operations, opposite-direction transfers with timeouts, in-memory service behavior, H2 persistence and rollback, simulation balance invariants, and UTF-8 statement export. Keep `AGENT.md` as the authoritative specification when changing any layer.
+The tests cover domain validation, deposits, withdrawals, transfers, concurrent deposit/withdraw operations, opposite-direction transfers with timeouts, in-memory service behavior, MySQL persistence and rollback, simulation balance invariants, and UTF-8 statement export. JDBC integration tests require a disposable MySQL test database configured with `MYSQL_TEST_URL`, `MYSQL_TEST_USER`, and `MYSQL_TEST_PASSWORD`. Keep `AGENT.md` as the authoritative specification when changing any layer.

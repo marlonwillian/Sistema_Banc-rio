@@ -18,7 +18,7 @@ com JDBC, e o extrato pode ser exportado para texto.
 
 1. Inicie a aplicação com `mvn exec:java`. A janela Swing apresenta as contas
    de demonstração na primeira execução; as contas e operações ficam no banco
-   H2 local em `data/sistema-bancario.mv.db`.
+   MySQL configurado para a aplicação.
 2. Selecione uma conta e mostre o saldo e o extrato. Faça um depósito, depois
    um saque válido e uma transferência para outra conta. Mostre que o saldo e
    o extrato refletem cada operação.
@@ -32,7 +32,7 @@ com JDBC, e o extrato pode ser exportado para texto.
    no caso inseguro e apresenta o resultado comparativo.
 6. Use **Exportar extrato** e abra o `.txt` salvo. O arquivo de exemplo do
    projeto está em `docs/extrato-exemplo.txt`.
-7. Feche e abra a aplicação novamente para mostrar que os dados salvos no H2
+7. Feche e abra a aplicação novamente para mostrar que os dados salvos no MySQL
    continuam disponíveis.
 
 Para executar a bateria automatizada de verificações, use `mvn test`; para
@@ -86,8 +86,10 @@ sua própria conexão. A gravação JDBC da operação e suas transações usa u
 transação de banco: os saldos afetados e os registros da operação são
 confirmados juntos. Por isso, o serviço não repete a atualização de saldo
 depois do commit JDBC. Uma transferência grava seus dois registros em conjunto.
-Na inicialização, `ConnectionFactory` executa `schema.sql`. O padrão é o banco
-H2 em arquivo; os testes usam bases H2 em memória isoladas.
+Na inicialização, `ConnectionFactory` executa `schema.sql`. A aplicação usa o
+MySQL local por padrão e permite configurar URL, usuário e senha por
+propriedades Java ou variáveis de ambiente. Os testes JDBC usam um banco MySQL
+separado e descartável.
 
 O extrato consultado pela interface vem do repositório de transações. A
 exportação é feita por `ExtratoExporter`, com codificação UTF-8 e fechamento
@@ -154,8 +156,8 @@ Não. `ContaInsegura` pertence ao pacote de demonstração e só é invocada pel
 fluxo específico de comparação. O serviço bancário usa `Conta`.
 
 **O que foi adicionado além do núcleo acadêmico?**  
-A interface Swing estilizada com FlatLaf, cadastro de contas pela janela, H2
-local para simplificar a execução, repositórios em memória para testes e uma
+A interface Swing estilizada com FlatLaf, cadastro de contas pela janela,
+configuração do MySQL por ambiente, repositórios em memória para testes e uma
 demonstração reproduzível da corrida. Esses itens apoiam o uso e a apresentação;
 não substituem os requisitos obrigatórios.
 

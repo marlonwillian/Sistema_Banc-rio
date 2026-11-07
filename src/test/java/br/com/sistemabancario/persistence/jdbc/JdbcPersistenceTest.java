@@ -9,13 +9,13 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Statement;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -155,9 +155,39 @@ class JdbcPersistenceTest {
     }
 
     private static ConnectionFactory criarBanco() {
+        String url = System.getenv("MYSQL_TEST_URL");
+        assumeTrue(url != null && !url.isBlank(),
+                "Defina MYSQL_TEST_URL para executar os testes de integração MySQL.");
+        String database = nomeBanco(url);
+        assumeTrue(database.endsWith("_test"),
+                "MYSQL_TEST_URL deve apontar para um banco descartavel cujo nome termina em _test.");
         ConnectionFactory factory = new ConnectionFactory(
-                "jdbc:h2:mem:bank_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+                url,
+                variavelAmbiente("MYSQL_TEST_USER", "root"),
+                variavelAmbiente("MYSQL_TEST_PASSWORD", ""));
+        factory.inicializarSchema();
+        try (Connection connection = factory.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("DROP TABLE IF EXISTS transacoes");
+            statement.execute("DROP TABLE IF EXISTS contas");
+        } catch (Exception exception) {
+            throw new IllegalStateException("Nao foi possivel preparar o banco MySQL de teste.", exception);
+        }
         factory.inicializarSchema();
         return factory;
+    }
+
+    private static String nomeBanco(String jdbcUrl) {
+        int inicio = jdbcUrl.lastIndexOf('/');
+        if (inicio < 0) {
+            return "";
+        }
+        int fim = jdbcUrl.indexOf('?', inicio);
+        return jdbcUrl.substring(inicio + 1, fim < 0 ? jdbcUrl.length() : fim);
+    }
+
+    private static String variavelAmbiente(String nome, String padrao) {
+        String valor = System.getenv(nome);
+        return valor == null ? padrao : valor;
     }
 }
