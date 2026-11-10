@@ -23,6 +23,10 @@ Sem sincronização:       R$ 1,00
 Com Conta sincronizada:  R$ 2,00
 ```
 
+## Evidência visual
+
+![Demonstração de race condition na interface do sistema](imagens/race_condition.png)
+
 ## Conclusão
 
 Na versão insegura, ambas as threads calculam R$ 1,00 a partir do mesmo saldo
