@@ -169,6 +169,7 @@ class JdbcPersistenceTest {
         try (Connection connection = factory.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("DROP TABLE IF EXISTS transacoes");
+            statement.execute("DROP TABLE IF EXISTS usuarios");
             statement.execute("DROP TABLE IF EXISTS contas");
         } catch (Exception exception) {
             throw new IllegalStateException("Nao foi possivel preparar o banco MySQL de teste.", exception);

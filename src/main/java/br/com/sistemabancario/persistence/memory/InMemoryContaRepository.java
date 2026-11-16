@@ -49,6 +49,13 @@ public final class InMemoryContaRepository implements ContaRepository {
         });
     }
 
+    @Override
+    public void excluir(long contaId) {
+        if (contas.remove(contaId) == null) {
+            throw new IllegalArgumentException("A conta " + contaId + " nao existe.");
+        }
+    }
+
     private record DadosConta(long id, String titular, BigDecimal saldo) {
         private Conta paraConta() {
             return new Conta(id, new Cliente(id, titular), saldo);

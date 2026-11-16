@@ -41,25 +41,28 @@ public final class ConnectionFactory {
     }
 
     public void inicializarSchema() {
-        String schema;
-        try (InputStream input = ConnectionFactory.class.getResourceAsStream("/schema.sql")) {
+        executarScript("/schema.sql");
+        executarScript("/migration-usuarios.sql");
+    }
+
+    private void executarScript(String path) {
+        try (InputStream input = ConnectionFactory.class.getResourceAsStream(path)) {
             if (input == null) {
-                throw new PersistenceException("O recurso schema.sql nao foi encontrado.");
+                return;
             }
-            schema = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            String schema = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            try (Connection connection = getConnection();
+                 Statement statement = connection.createStatement()) {
+                for (String sql : schema.split(";")) {
+                    if (!sql.isBlank()) {
+                        statement.execute(sql);
+                    }
+                }
+            } catch (SQLException exception) {
+                throw new PersistenceException("Nao foi possivel inicializar o schema do banco.", exception);
+            }
         } catch (IOException exception) {
             throw new PersistenceException("Nao foi possivel ler o schema do banco.", exception);
-        }
-
-        try (Connection connection = getConnection();
-             Statement statement = connection.createStatement()) {
-            for (String sql : schema.split(";")) {
-                if (!sql.isBlank()) {
-                    statement.execute(sql);
-                }
-            }
-        } catch (SQLException exception) {
-            throw new PersistenceException("Nao foi possivel inicializar o schema do banco.", exception);
         }
     }
 

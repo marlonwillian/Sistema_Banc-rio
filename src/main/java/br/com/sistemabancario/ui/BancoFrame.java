@@ -2,13 +2,18 @@ package br.com.sistemabancario.ui;
 
 import br.com.sistemabancario.domain.Cliente;
 import br.com.sistemabancario.domain.Conta;
+import br.com.sistemabancario.domain.Perfil;
 import br.com.sistemabancario.domain.TipoTransacao;
 import br.com.sistemabancario.domain.Transacao;
+import br.com.sistemabancario.domain.Usuario;
 import br.com.sistemabancario.io.ExtratoExporter;
+import br.com.sistemabancario.service.AssistenteIAService;
+import br.com.sistemabancario.service.AuthService;
+import br.com.sistemabancario.service.BancoService;
+import br.com.sistemabancario.service.SessaoUsuario;
 import br.com.sistemabancario.simulacao.ResultadoSimulacao;
 import br.com.sistemabancario.simulacao.SimulacaoRunner;
 import br.com.sistemabancario.simulacao.demo.DemonstracaoRaceCondition;
-import br.com.sistemabancario.service.BancoService;
 import com.formdev.flatlaf.FlatLightLaf;
 
 import javax.swing.BorderFactory;
@@ -62,9 +67,12 @@ public final class BancoFrame extends JFrame {
     private static final Color LINHA = new Color(0xE9EDF1);
 
     private final BancoService bancoService;
+    private final AuthService authService;
+    private final Usuario usuarioAtual;
     private final JComboBox<Conta> contaOrigem;
     private final JComboBox<Conta> contaDestino;
     private final JTextField campoValor = new JTextField(18);
+    private final JTextField campoContaDestino = new JTextField(12);
     private final JLabel saldoAtual = new JLabel();
     private final JLabel nomeTitular = new JLabel();
     private final JLabel nomeTitularResumo = new JLabel();
@@ -76,23 +84,47 @@ public final class BancoFrame extends JFrame {
             return false;
         }
     };
+    private final DefaultTableModel modeloContasAdmin = new DefaultTableModel(
+            new Object[]{"CONTA", "TITULAR", "SALDO"}, 0) {
+        @Override
+        public boolean isCellEditable(int row, int column) {
+            return false;
+        }
+    };
     private final JPanel painelOperacoes = new JPanel();
     private final JPanel painelExtrato = new JPanel();
 
     public BancoFrame(BancoService bancoService) {
+        this(bancoService, SessaoUsuario.getUsuarioAtual().orElse(null), null);
+    }
+
+    public BancoFrame(BancoService bancoService, Usuario usuarioAtual) {
+        this(bancoService, usuarioAtual, null);
+    }
+
+    public BancoFrame(BancoService bancoService, Usuario usuarioAtual, AuthService authService) {
         super("Sistema Bancário");
         this.bancoService = bancoService;
-        List<Conta> contas = bancoService.listarContas();
+        this.authService = authService;
+        this.usuarioAtual = usuarioAtual;
+        List<Conta> contas = contasAcessiveis();
+        List<Conta> contasDestino = usuarioAtual == null || usuarioAtual.eAdmin()
+                ? bancoService.listarContas()
+                : List.of();
         ListCellRenderer<Conta> renderizador = criarRenderizadorConta();
         contaOrigem = new JComboBox<>(contas.toArray(Conta[]::new));
-        contaDestino = new JComboBox<>(contas.toArray(Conta[]::new));
+        contaDestino = new JComboBox<>(contasDestino.toArray(Conta[]::new));
         contaOrigem.setRenderer(renderizador);
         contaDestino.setRenderer(renderizador);
+        EstiloUI.aplicarCampoSelecao(contaOrigem);
+        EstiloUI.aplicarCampoSelecao(contaDestino);
+        EstiloUI.aplicarCampoTexto(campoValor);
+        EstiloUI.aplicarCampoTexto(campoContaDestino);
 
         configurarEstilo();
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(960, 680));
-        setPreferredSize(new Dimension(1160, 790));
+        setPreferredSize(new Dimension(1120, 760));
         setContentPane(criarConteudo());
         contaOrigem.addActionListener(event -> atualizarPainel());
         atualizarPainel();
@@ -102,17 +134,18 @@ public final class BancoFrame extends JFrame {
 
     public static void instalarTema() {
         FlatLightLaf.setup();
+        EstiloUI.aplicarTemaPadrao();
         configurarDefaults();
     }
 
     private static void configurarDefaults() {
         UIManager.put("Button.arc", 12);
         UIManager.put("Component.arc", 10);
-        UIManager.put("TextComponent.arc", 8);
+        UIManager.put("TextComponent.arc", 10);
         UIManager.put("Component.focusWidth", 1);
         UIManager.put("Table.showHorizontalLines", true);
         UIManager.put("Table.showVerticalLines", false);
-        UIManager.put("Table.selectionBackground", new Color(0xE4F5F3));
+        UIManager.put("Table.selectionBackground", new Color(0xDDEEFF));
         UIManager.put("Table.selectionForeground", TEXTO);
     }
 
@@ -132,6 +165,18 @@ public final class BancoFrame extends JFrame {
         pagina.add(criarCorpo(), BorderLayout.CENTER);
         raiz.add(pagina, BorderLayout.CENTER);
         return raiz;
+    }
+
+    private List<Conta> contasAcessiveis() {
+        if (usuarioAtual == null || usuarioAtual.perfil() == Perfil.ADMIN) {
+            return bancoService.listarContas();
+        }
+        if (usuarioAtual.contaId() == null) {
+            return List.of();
+        }
+        return bancoService.buscarContaPorId(usuarioAtual.contaId())
+                .map(List::of)
+                .orElse(List.of());
     }
 
     private JPanel criarBarraLateral() {
@@ -179,14 +224,19 @@ public final class BancoFrame extends JFrame {
         barra.add(extrato);
         JButton demonstracao = criarBotaoLateral("⚡   Race condition", false);
         demonstracao.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JButton ia = criarBotaoLateral("🤖   Assistente IA", false);
+        ia.setAlignmentX(Component.LEFT_ALIGNMENT);
         barra.add(javax.swing.Box.createVerticalStrut(7));
         barra.add(demonstracao);
+        barra.add(javax.swing.Box.createVerticalStrut(7));
+        barra.add(ia);
 
         operacoes.addActionListener(event -> painelOperacoes.scrollRectToVisible(
                 new Rectangle(0, 0, painelOperacoes.getWidth(), painelOperacoes.getHeight())));
         extrato.addActionListener(event -> painelExtrato.scrollRectToVisible(
                 new Rectangle(0, 0, painelExtrato.getWidth(), painelExtrato.getHeight())));
         demonstracao.addActionListener(event -> demonstrarRaceCondition());
+        ia.addActionListener(event -> abrirAssistenteIA());
 
         barra.add(javax.swing.Box.createVerticalGlue());
         JLabel rodape = new JLabel("<html>AMBIENTE DE DEMONSTRAÇÃO<br><br>Operações registradas na sessão</html>");
@@ -233,15 +283,19 @@ public final class BancoFrame extends JFrame {
         JPanel acoes = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         acoes.setOpaque(false);
         JButton novaConta = criarBotao("＋ Nova conta", true);
-        JLabel ambiente = new JLabel("  ●  Banco local");
+        novaConta.setVisible(usuarioAtual == null || usuarioAtual.eAdmin());
+        JButton logout = criarBotao("Sair", false);
+        JLabel ambiente = new JLabel("  ●  " + (usuarioAtual != null && usuarioAtual.eAdmin() ? "Administrador" : "Usuário"));
         ambiente.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
         ambiente.setForeground(new Color(0x308B70));
         ambiente.setOpaque(true);
         ambiente.setBackground(new Color(0xE5F4EF));
         ambiente.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 12));
         acoes.add(novaConta);
+        acoes.add(logout);
         acoes.add(ambiente);
         novaConta.addActionListener(event -> criarConta());
+        logout.addActionListener(event -> sairSistema());
         cabecalho.add(acoes, BorderLayout.EAST);
         return cabecalho;
     }
@@ -250,13 +304,27 @@ public final class BancoFrame extends JFrame {
         JPanel corpo = new JPanel();
         corpo.setOpaque(false);
         corpo.setLayout(new javax.swing.BoxLayout(corpo, javax.swing.BoxLayout.Y_AXIS));
-        corpo.add(criarCartaoSaldo());
+        JPanel cartaoSaldo = criarCartaoSaldo();
+        cartaoSaldo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        corpo.add(cartaoSaldo);
         corpo.add(javax.swing.Box.createVerticalStrut(16));
-        corpo.add(criarCartoesResumo());
+        JPanel cartoesResumo = criarCartoesResumo();
+        cartoesResumo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        corpo.add(cartoesResumo);
+        if (usuarioAtual != null && usuarioAtual.eAdmin()) {
+            corpo.add(javax.swing.Box.createVerticalStrut(17));
+            JPanel painelAdministracao = criarPainelAdministracao();
+            painelAdministracao.setAlignmentX(Component.LEFT_ALIGNMENT);
+            corpo.add(painelAdministracao);
+        }
         corpo.add(javax.swing.Box.createVerticalStrut(17));
-        corpo.add(criarPainelOperacoes());
+        JPanel operacoes = criarPainelOperacoes();
+        operacoes.setAlignmentX(Component.LEFT_ALIGNMENT);
+        corpo.add(operacoes);
         corpo.add(javax.swing.Box.createVerticalStrut(17));
-        corpo.add(criarPainelExtrato());
+        JPanel extrato = criarPainelExtrato();
+        extrato.setAlignmentX(Component.LEFT_ALIGNMENT);
+        corpo.add(extrato);
 
         JScrollPane scroll = new JScrollPane(corpo);
         scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -339,6 +407,38 @@ public final class BancoFrame extends JFrame {
         return cartao;
     }
 
+    private JPanel criarPainelAdministracao() {
+        JPanel painel = new JPanel(new BorderLayout());
+        painel.setOpaque(true);
+        painel.setBackground(BRANCO);
+        painel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(LINHA),
+                BorderFactory.createEmptyBorder(17, 20, 14, 20)));
+
+        JPanel cabecalho = new JPanel(new BorderLayout());
+        cabecalho.setOpaque(false);
+        JLabel titulo = new JLabel("Contas cadastradas");
+        titulo.setForeground(TEXTO);
+        titulo.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
+        cabecalho.add(titulo, BorderLayout.WEST);
+        painel.add(cabecalho, BorderLayout.NORTH);
+
+        JTable tabela = new JTable(modeloContasAdmin);
+        tabela.setRowHeight(32);
+        tabela.setShowGrid(false);
+        tabela.setIntercellSpacing(new Dimension(0, 0));
+        tabela.getTableHeader().setReorderingAllowed(false);
+        tabela.getTableHeader().setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+        tabela.getTableHeader().setForeground(TEXTO_SECUNDARIO);
+
+        atualizarTabelaAdmin();
+        JScrollPane rolagem = new JScrollPane(tabela);
+        rolagem.setBorder(BorderFactory.createEmptyBorder());
+        painel.add(rolagem, BorderLayout.CENTER);
+        painel.setPreferredSize(new Dimension(0, 230));
+        return painel;
+    }
+
     private JPanel criarPainelOperacoes() {
         painelOperacoes.setOpaque(true);
         painelOperacoes.setBackground(BRANCO);
@@ -373,30 +473,47 @@ public final class BancoFrame extends JFrame {
         campo.fill = GridBagConstraints.HORIZONTAL;
         campo.weightx = 1;
         adicionarCampo(formulario, campo, 0, 0, "VALOR (R$)", campoValor);
-        adicionarCampo(formulario, campo, 1, 0, "CONTA DE DESTINO", contaDestino);
+        boolean usuarioComum = usuarioAtual != null && usuarioAtual.eUsuario();
+        Component campoDestino = usuarioComum ? campoContaDestino : contaDestino;
+        String rotuloDestino = usuarioComum ? "NÚMERO DA CONTA DESTINO" : "CONTA DE DESTINO";
+        adicionarCampo(formulario, campo, 1, 0, rotuloDestino, campoDestino);
         painelOperacoes.add(formulario, BorderLayout.CENTER);
 
-        JPanel rodape = new JPanel(new BorderLayout(12, 0));
+        JPanel rodape = new JPanel();
         rodape.setOpaque(false);
+        rodape.setLayout(new javax.swing.BoxLayout(rodape, javax.swing.BoxLayout.Y_AXIS));
         rodape.setBorder(BorderFactory.createEmptyBorder(13, 0, 0, 0));
-        JLabel aviso = new JLabel("Os saques e transferências validam o saldo disponível.");
+        String textoAviso = usuarioComum
+                ? "Depósitos creditam sua conta; transferências debitam apenas sua conta."
+                : "Os saques e transferências validam o saldo disponível.";
+        JLabel aviso = new JLabel(textoAviso);
         aviso.setForeground(TEXTO_SECUNDARIO);
         aviso.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
-        rodape.add(aviso, BorderLayout.WEST);
+        aviso.setAlignmentX(Component.LEFT_ALIGNMENT);
+        rodape.add(aviso);
+        rodape.add(javax.swing.Box.createVerticalStrut(8));
 
         JPanel botoes = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         botoes.setOpaque(false);
+        botoes.setAlignmentX(Component.LEFT_ALIGNMENT);
+        botoes.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
         JButton depositar = criarBotao("Depositar", false);
         JButton sacar = criarBotao("Sacar", false);
         JButton transferir = criarBotao("Transferir", true);
         JButton simular = criarBotao("Simular", false);
         JButton exportar = criarBotao("Exportar extrato", false);
+        EstiloUI.aplicarBotao(depositar, false);
+        EstiloUI.aplicarBotao(sacar, false);
+        EstiloUI.aplicarBotao(transferir, true);
+        EstiloUI.aplicarBotao(simular, false);
+        EstiloUI.aplicarBotao(exportar, false);
         botoes.add(depositar);
         botoes.add(sacar);
         botoes.add(transferir);
         botoes.add(simular);
         botoes.add(exportar);
-        rodape.add(botoes, BorderLayout.EAST);
+        simular.setVisible(usuarioAtual == null || usuarioAtual.eAdmin());
+        rodape.add(botoes);
         painelOperacoes.add(rodape, BorderLayout.SOUTH);
 
         depositar.addActionListener(event -> executarOperacao(
@@ -432,16 +549,8 @@ public final class BancoFrame extends JFrame {
         painelExtrato.add(cabecalho, BorderLayout.NORTH);
 
         JTable tabela = new JTable(modeloExtrato);
-        tabela.setRowHeight(34);
-        tabela.setShowGrid(false);
-        tabela.setIntercellSpacing(new Dimension(0, 0));
-        tabela.setFillsViewportHeight(true);
-        tabela.getTableHeader().setReorderingAllowed(false);
+        EstiloUI.aplicarTabela(tabela);
         tabela.getTableHeader().setPreferredSize(new Dimension(0, 30));
-        tabela.getTableHeader().setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
-        tabela.getTableHeader().setForeground(TEXTO_SECUNDARIO);
-        tabela.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-        tabela.setForeground(TEXTO);
         tabela.getColumnModel().getColumn(0).setPreferredWidth(138);
         tabela.getColumnModel().getColumn(1).setPreferredWidth(210);
         tabela.getColumnModel().getColumn(2).setPreferredWidth(150);
@@ -478,14 +587,9 @@ public final class BancoFrame extends JFrame {
 
     private static JButton criarBotao(String texto, boolean principal) {
         JButton botao = new JButton(texto);
-        botao.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        botao.setFocusPainted(false);
+        EstiloUI.aplicarBotao(botao, principal);
         botao.putClientProperty("JButton.buttonType", "roundRect");
         botao.setPreferredSize(new Dimension(112, 37));
-        if (principal) {
-            botao.setBackground(TURQUESA);
-            botao.setForeground(Color.WHITE);
-        }
         return botao;
     }
 
@@ -505,6 +609,7 @@ public final class BancoFrame extends JFrame {
         try {
             operacao.run();
             campoValor.setText("");
+            campoContaDestino.setText("");
             atualizarPainel();
             JOptionPane.showMessageDialog(
                     this,
@@ -657,9 +762,12 @@ public final class BancoFrame extends JFrame {
     }
 
     private void atualizarContasDisponiveis(Conta novaConta) {
-        List<Conta> contas = bancoService.listarContas();
-        contaOrigem.setModel(new DefaultComboBoxModel<>(contas.toArray(Conta[]::new)));
-        contaDestino.setModel(new DefaultComboBoxModel<>(contas.toArray(Conta[]::new)));
+        List<Conta> acessiveis = contasAcessiveis();
+        List<Conta> destinos = usuarioAtual == null || usuarioAtual.eAdmin()
+                ? bancoService.listarContas()
+                : List.of();
+        contaOrigem.setModel(new DefaultComboBoxModel<>(acessiveis.toArray(Conta[]::new)));
+        contaDestino.setModel(new DefaultComboBoxModel<>(destinos.toArray(Conta[]::new)));
         contaOrigem.setSelectedItem(novaConta);
         contaDestino.setSelectedItem(novaConta);
         atualizarPainel();
@@ -682,7 +790,50 @@ public final class BancoFrame extends JFrame {
         }
     }
 
+    private void abrirAssistenteIA() {
+        try {
+            AssistenteIADialog dialogo = new AssistenteIADialog(this, new AssistenteIAService(bancoService));
+            dialogo.setVisible(true);
+        } catch (RuntimeException exception) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    exception.getMessage(),
+                    "Assistente IA indisponível",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void sairSistema() {
+        SessaoUsuario.fechar();
+        dispose();
+        if (authService == null) {
+            return;
+        }
+        LoginDialog login = new LoginDialog(null, authService);
+        Usuario usuario = login.getUsuarioAutenticado();
+        if (usuario == null) {
+            return;
+        }
+        BancoFrame novaJanela = new BancoFrame(bancoService, usuario, authService);
+        novaJanela.setVisible(true);
+    }
+
+    private void atualizarTabelaAdmin() {
+        modeloContasAdmin.setRowCount(0);
+        if (usuarioAtual == null || !usuarioAtual.eAdmin()) {
+            return;
+        }
+        for (Conta conta : bancoService.listarContas()) {
+            modeloContasAdmin.addRow(new Object[] {
+                    conta.getId(),
+                    conta.getTitular().nome(),
+                    formatarMoeda(conta.getSaldo())
+            });
+        }
+    }
+
     private void atualizarPainel() {
+        atualizarTabelaAdmin();
         Conta conta = contaOrigemSelecionada();
         if (conta == null) {
             saldoAtual.setText(formatarMoeda(BigDecimal.ZERO));
@@ -724,6 +875,18 @@ public final class BancoFrame extends JFrame {
     }
 
     private long idContaDestino() {
+        if (usuarioAtual != null && usuarioAtual.eUsuario()) {
+            String texto = campoContaDestino.getText().trim();
+            try {
+                long contaId = Long.parseLong(texto);
+                if (contaId <= 0) {
+                    throw new NumberFormatException();
+                }
+                return contaId;
+            } catch (NumberFormatException exception) {
+                throw new IllegalArgumentException("Informe um número de conta de destino válido.");
+            }
+        }
         Conta conta = (Conta) contaDestino.getSelectedItem();
         if (conta == null) {
             throw new IllegalArgumentException("Selecione uma conta de destino.");

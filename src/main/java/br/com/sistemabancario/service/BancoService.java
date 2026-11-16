@@ -2,7 +2,9 @@ package br.com.sistemabancario.service;
 
 import br.com.sistemabancario.domain.Cliente;
 import br.com.sistemabancario.domain.Conta;
+import br.com.sistemabancario.domain.Perfil;
 import br.com.sistemabancario.domain.Transacao;
+import br.com.sistemabancario.domain.Usuario;
 import br.com.sistemabancario.persistence.ContaRepository;
 import br.com.sistemabancario.persistence.PersistenceException;
 import br.com.sistemabancario.persistence.TransacaoRepository;
@@ -11,6 +13,7 @@ import br.com.sistemabancario.persistence.memory.InMemoryContaRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -32,16 +35,34 @@ public final class BancoService {
     }
 
     public List<Conta> listarContas() {
+        contaRepository.listarTodas().forEach(conta -> contas.putIfAbsent(conta.getId(), conta));
+        Usuario usuarioAtual = SessaoUsuario.getUsuarioAtual().orElse(null);
+        if (usuarioAtual != null && usuarioAtual.eUsuario()) {
+            return buscarContaInterna(usuarioAtual.contaId()).map(List::of).orElseGet(List::of);
+        }
         return contas.values().stream()
                 .sorted((primeira, segunda) -> Long.compare(primeira.getId(), segunda.getId()))
                 .toList();
     }
 
     public Optional<Conta> buscarContaPorId(long contaId) {
-        return Optional.ofNullable(contas.get(contaId));
+        validarPermissao(contaId, "consultar a conta");
+        return buscarContaInterna(contaId);
+    }
+
+    private Optional<Conta> buscarContaInterna(long contaId) {
+        Conta conta = contas.get(contaId);
+        if (conta != null) {
+            return Optional.of(conta);
+        }
+        return contaRepository.buscarPorId(contaId)
+                .map(persistida -> contas.putIfAbsent(contaId, persistida) == null
+                        ? persistida
+                        : contas.get(contaId));
     }
 
     public Conta criarConta(long id, Cliente titular, BigDecimal saldoInicial) {
+        validarPermissaoAdministrador("criar uma conta");
         Conta conta = new Conta(id, titular, saldoInicial);
         contaRepository.salvar(conta);
         if (contas.putIfAbsent(id, conta) != null) {
@@ -51,6 +72,7 @@ public final class BancoService {
     }
 
     public Transacao depositar(long contaId, BigDecimal valor) {
+        validarPermissao(contaId, "depositar");
         ReentrantLock lock = lockPara(contaId);
         lock.lock();
         try {
@@ -64,6 +86,7 @@ public final class BancoService {
     }
 
     public Transacao sacar(long contaId, BigDecimal valor) {
+        validarPermissao(contaId, "sacar");
         ReentrantLock lock = lockPara(contaId);
         lock.lock();
         try {
@@ -77,8 +100,12 @@ public final class BancoService {
     }
 
     public List<Transacao> transferir(long origemId, long destinoId, BigDecimal valor) {
+        validarPermissao(origemId, "transferir da conta de origem");
         if (origemId == destinoId) {
             throw new IllegalArgumentException("Origem e destino devem ser contas diferentes.");
+        }
+        if (buscarContaInterna(destinoId).isEmpty()) {
+            throw new IllegalArgumentException("Conta de destino " + destinoId + " nao encontrada.");
         }
         long primeiroId = Math.min(origemId, destinoId);
         long segundoId = Math.max(origemId, destinoId);
@@ -99,8 +126,26 @@ public final class BancoService {
     }
 
     public List<Transacao> buscarExtrato(long contaId) {
+        validarPermissao(contaId, "consultar o extrato");
         buscarConta(contaId);
         return transacaoRepository.buscarPorConta(contaId);
+    }
+
+    private void validarPermissao(long contaId, String operacao) {
+        Usuario usuarioAtual = SessaoUsuario.getUsuarioAtual().orElse(null);
+        if (usuarioAtual == null || usuarioAtual.perfil() == Perfil.ADMIN) {
+            return;
+        }
+        if (!Objects.equals(usuarioAtual.contaId(), contaId)) {
+            throw new SecurityException("Usuario nao tem permissao para " + operacao + " na conta " + contaId + ".");
+        }
+    }
+
+    private void validarPermissaoAdministrador(String operacao) {
+        Usuario usuarioAtual = SessaoUsuario.getUsuarioAtual().orElse(null);
+        if (usuarioAtual != null && !usuarioAtual.eAdmin()) {
+            throw new SecurityException("Usuario nao tem permissao para " + operacao + ".");
+        }
     }
 
     private void persistir(long contaId, List<Transacao> transacoes) {

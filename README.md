@@ -10,8 +10,9 @@ concorrentes; a persistência JDBC guarda contas e movimentações entre execuç
 - Maven 3.9 ou superior;
 - ambiente desktop com suporte a Swing.
 
-O MySQL Server deve estar instalado e ativo. As dependências FlatLaf, MySQL
-Connector/J e JUnit são resolvidas pelo Maven.
+O MySQL Server deve estar instalado e ativo. Ollama com o modelo `qwen2.5` é
+opcional e necessário somente para usar o assistente IA. As dependências
+FlatLaf, MySQL Connector/J, BCrypt e JUnit são resolvidas pelo Maven.
 
 ## Compilar e executar
 
@@ -23,8 +24,8 @@ mvn exec:java
 ```
 
 O primeiro comando compila o projeto e executa os testes. O segundo abre a
-janela Swing. Também é possível abrir o projeto no IntelliJ/Eclipse e executar
-`br.com.sistemabancario.app.Main`.
+tela de login Swing. Também é possível abrir o projeto no IntelliJ/Eclipse e
+executar `br.com.sistemabancario.app.Main`.
 
 Crie o banco de dados uma vez no MySQL:
 
@@ -68,6 +69,11 @@ mvn test
 Os testes JDBC recriam as tabelas nesse banco de teste. **Não use o banco de
 produção ou o banco de demonstração como `MYSQL_TEST_URL`.** Sem essa
 configuração, os testes de integração MySQL são marcados como ignorados.
+Na execução mais recente neste ambiente, `mvn test` concluiu com 30 testes,
+0 falhas e 4 testes JDBC ignorados porque `MYSQL_TEST_*` não estava configurado.
+Os testes JDBC precisam ser executados com essas variáveis para validar o
+MySQL; a rotina de preparação foi ajustada para remover `usuarios` antes de
+`contas`, evitando a falha anterior causada pela chave estrangeira.
 
 Uma classe de teste:
 
@@ -85,12 +91,21 @@ Os testes de exportação usam diretórios temporários JUnit.
 
 ## Usar a aplicação
 
+- Em um banco novo, entre como `admin` / `admin123` (configurável em
+  `src/main/resources/config.properties`) ou use **Criar conta** na tela de
+  login para cadastrar um usuário comum. O cadastro cria uma conta vinculada
+  com saldo zero; senhas são armazenadas com BCrypt.
+- O administrador consulta e opera em todas as contas. O usuário comum só lista,
+  consulta e opera a própria conta; a camada de serviço também bloqueia acesso
+  às demais e impede que usuários criem contas. Para transferir, informa o
+  número de destino, mas o débito sempre sai da própria conta. Depósito credita
+  a conta própria e não retira dinheiro de outra conta.
 - Selecione uma conta no cartão de saldo.
-- Use **Nova conta** para cadastrar titular e saldo inicial; a nova conta é
-  persistida e fica disponível nos seletores de operações.
+- Como administrador, use **Nova conta** para cadastrar titular e saldo
+  inicial; a nova conta é persistida e fica disponível nos seletores.
 - Informe o valor em reais; são aceitos formatos como `25,50` e `25.50`.
 - Use **Depositar**, **Sacar** ou **Transferir**. Para transferência, escolha
-  também uma conta de destino.
+  uma conta de destino ou informe seu número, conforme o perfil.
 - Consulte as movimentações recentes na tabela de extrato.
 - Use **Exportar extrato** para salvar um arquivo `.txt` em UTF-8.
 - Use **Simular** para disparar depósitos, saques e transferências em quatro
@@ -98,12 +113,18 @@ Os testes de exportação usam diretórios temporários JUnit.
 - Use **Race condition** na navegação lateral para comparar, de forma
   reproduzível, o resultado inseguro sem sincronização e o saldo da `Conta`
   sincronizada.
+- **Assistente IA** envia perguntas em português ao Ollama local; o usuário
+  comum só envia o próprio extrato. Instale o Ollama e execute `ollama pull
+  qwen2.5` para habilitar o chat.
+- A janela usa rolagem vertical e o painel de operações distribui aviso e
+  botões em linhas separadas para evitar cortes em larguras menores; controles
+  de administração ficam disponíveis somente ao administrador.
 
 ## Arquitetura
 
 - `domain`: `Cliente`, `Conta`, `Transacao`, tipos e validações de negócio.
   `Conta` é o único objeto que modifica o saldo; ela protege saldo e extrato
-  com o mesmo monitor.
+  com o mesmo monitor. `Usuario` e `Perfil` modelam os acessos.
 - `persistence`: contratos `ContaRepository` e `TransacaoRepository`, além
   das implementações em memória e JDBC.
 - `persistence.jdbc`: `ConnectionFactory`, `JdbcContaRepository` e
@@ -116,11 +137,14 @@ Os testes de exportação usam diretórios temporários JUnit.
   `SimulacaoRunner` e relatório de saldos esperados e obtidos.
 - `simulacao.demo`: conta deliberadamente insegura, isolada da conta real,
   utilizada somente para mostrar a perda de atualização.
-- `service`: `BancoService` coordena domínio e repositórios. Locks de serviço,
-  ordenados por ID em transferências, mantêm a ordem entre a mudança no domínio
-  e a persistência sem manter monitores de `Conta` durante JDBC.
+- `service`: `BancoService` coordena domínio, repositórios e permissões;
+  `AuthService` trata login/cadastro e `AssistenteIAService` integra o Ollama.
+  Locks de serviço, ordenados por ID em transferências, mantêm a ordem entre a
+  mudança no domínio e a persistência sem manter monitores de `Conta` durante
+  JDBC.
 - `io`: `ExtratoExporter` grava o extrato recebido em UTF-8 sem acessar banco.
-- `ui`: interface Swing; coleta entradas e delega operações ao serviço.
+- `ui`: login, cadastro, painel bancário e chat Swing; coleta entradas e
+  delega operações aos serviços.
 - `app`: `Main` compõe persistência, serviço e janela Swing.
 - `src/main/resources/schema.sql`: tabelas de contas/transações e índice de
   consulta de extrato.
@@ -130,7 +154,8 @@ Os testes de exportação usam diretórios temporários JUnit.
 O projeto inclui operações monetárias com `BigDecimal`, validações de saldo e
 valor, registros imutáveis, simulação multithread, contagem de saques recusados,
 conferência de saldos, proteção contra deadlock, persistência JDBC, exportação
-de extrato e testes JUnit de domínio, serviço, concorrência, JDBC e I/O.
+de extrato, autenticação por perfil com BCrypt e testes JUnit de domínio,
+serviço, concorrência, JDBC e I/O.
 
 O arquivo `RELATORIO-RACE-CONDITION.md` registra a comparação “antes e depois”;
 `docs/extrato-exemplo.txt` é um exemplo de extrato exportado.

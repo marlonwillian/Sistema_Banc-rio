@@ -83,6 +83,20 @@ public final class JdbcContaRepository implements ContaRepository {
         }
     }
 
+    @Override
+    public void excluir(long contaId) {
+        String sql = "DELETE FROM contas WHERE id = ?";
+        try (Connection connection = connectionFactory.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, contaId);
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalArgumentException("A conta " + contaId + " nao existe.");
+            }
+        } catch (SQLException exception) {
+            throw new PersistenceException("Nao foi possivel excluir a conta " + contaId + ".", exception);
+        }
+    }
+
     private static Conta mapearConta(ResultSet result) throws SQLException {
         long id = result.getLong("id");
         return new Conta(id, new Cliente(id, result.getString("titular")),

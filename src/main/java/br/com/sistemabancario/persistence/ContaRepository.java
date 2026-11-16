@@ -14,4 +14,6 @@ public interface ContaRepository {
     List<Conta> listarTodas();
 
     void atualizarSaldo(long contaId, BigDecimal novoSaldo);
+
+    void excluir(long contaId);
 }

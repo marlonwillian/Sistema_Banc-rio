@@ -37,3 +37,10 @@ produzem o total correto. `ContaInsegura` fica isolada em
 
 O cenário também é verificado por `DemonstracaoRaceConditionTest` e
 `ContaConcorrenciaTest`.
+
+## Validação automatizada
+
+Na execução mais recente de `mvn test`, os testes de concorrência e da
+demonstração passaram. O resultado geral foi 30 testes, 0 falhas e 4 testes
+JDBC ignorados por falta de configuração do banco de teste; esses testes JDBC
+não fazem parte da validação desta demonstração.
